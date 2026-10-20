@@ -8,27 +8,30 @@ capacity = 100.0
 min_soc = 20.0
 max_soc = 80.0
 usable_capacity = max_soc - min_soc
-max_rate = 25.0
-eta_c = math.sqrt(0.90)
-eta_d = math.sqrt(0.90)
+max_rate = 25.0 #discharge power
+eta_c = math.sqrt(0.90) #charging efficiency
+eta_d = math.sqrt(0.90) #discharging efficiency
 np.random.seed(42)
 prices = np.random.uniform(20, 150, 24)
 
-horizon = 3
+horizon = 3 #prediction horizon length
 T = len(prices)
 
 def optimise_window(price_window, initial_soc):
-    H = len(price_window)
+    #price window: forecasted prices within prediction horizon (ie a sliced index of prices)
+    H = len(price_window) #equal to horizon
     model = gp.Model("rolling_battery")
     model.Params.OutputFlag = 0
 
-    # Decision variables
+    #decision variables
     C = model.addVars(H, lb=0, ub=max_rate, name="Charge")
     D = model.addVars(H, lb=0, ub=max_rate, name="Discharge")
     SOC = model.addVars(H + 1, lb=20, ub=80, name="SOC")
-    model.addConstr(SOC[0] == initial_soc)
 
-    # SOC dynamics
+    #constraints
+    model.addConstr(SOC[0] == initial_soc) #initial condition constraint
+
+    #SOC dynamics
     for t in range(H):
         model.addConstr(
             SOC[t+1] == SOC[t]
@@ -36,17 +39,15 @@ def optimise_window(price_window, initial_soc):
             - D[t] / eta_d)
 
     # Objective
-    objective = gp.quicksum(
-        price_window[t] * (D[t] - C[t])
-        for t in range(H))
+    objective = gp.quicksum(price_window[t] * (D[t] - C[t]) for t in range(H))
 
     model.setObjective(objective, GRB.MAXIMIZE)
     model.optimize()
     if model.status == GRB.OPTIMAL:
 
         return {
-            "charge": C[0].X,
-            "discharge": D[0].X,
+            "charge": C[0].X, #first optimal charge power
+            "discharge": D[0].X, #first optimal discharge power
             "predicted_soc": SOC[1].X,
             "profit": model.ObjVal}
     else:
@@ -55,26 +56,22 @@ def optimise_window(price_window, initial_soc):
 current_soc = 30.0
 results = []
 for t in range(T):
-    # Define the future window
+    #define the future window
     end = min(t + horizon, T)
     price_window = prices[t:end]
 
-    # Optimise future window
+    #optimise future window
     result = optimise_window(
         price_window,
-        current_soc)
-    # Implement ONLY the first decision
+        current_soc) #enforce initial soc for the simulation to logically be equivalent to current soc
+    
+    #implement ONLY the first decision
     charge = result["charge"]
     discharge = result["discharge"]
 
+    realised_profit = prices[t] * (discharge - charge)
 
-    realised_profit = prices[t] * (
-        discharge - charge)
-
-    next_soc = (
-        current_soc
-        + eta_c * charge
-        - discharge / eta_d)
+    next_soc = (current_soc+ eta_c * charge - discharge / eta_d)
 
     results.append({
         "hour": t,
@@ -85,7 +82,7 @@ for t in range(T):
         "soc_end": next_soc,
         "profit": realised_profit})
 
-    # Move to next hour
+    #move to next hour
     current_soc = next_soc
 
 cumulative_profit = sum(r["profit"] for r in results)
