@@ -52,118 +52,118 @@ def optimise_window(price_window, initial_soc):
             "profit": model.ObjVal}
     else:
         raise RuntimeError("Optimisation failed")
-    
-current_soc = 30.0
-results = []
-for t in range(T):
-    #define the future window
-    end = min(t + horizon, T)
-    price_window = prices[t:end]
 
-    #optimise future window
-    result = optimise_window(
-        price_window,
-        current_soc) #enforce initial soc for the simulation to logically be equivalent to current soc
-    
-    #implement ONLY the first decision
-    charge = result["charge"]
-    discharge = result["discharge"]
+if __name__ == "__main__":
+    current_soc = 30.0
+    results = []
+    for t in range(T):
+        #define the future window
+        end = min(t + horizon, T)
+        price_window = prices[t:end]
 
-    realised_profit = prices[t] * (discharge - charge)
+        #optimise future window
+        result = optimise_window(
+            price_window,
+            current_soc) #enforce initial soc for the simulation to logically be equivalent to current soc
+        
+        #implement ONLY the first decision
+        charge = result["charge"]
+        discharge = result["discharge"]
 
-    next_soc = (current_soc+ eta_c * charge - discharge / eta_d)
+        realised_profit = prices[t] * (discharge - charge)
 
-    results.append({
-        "hour": t,
-        "price": prices[t],
-        "soc_start": current_soc,
-        "charge": charge,
-        "discharge": discharge,
-        "soc_end": next_soc,
-        "profit": realised_profit})
+        next_soc = (current_soc+ eta_c * charge - discharge / eta_d)
 
-    #move to next hour
-    current_soc = next_soc
+        results.append({
+            "hour": t,
+            "price": prices[t],
+            "soc_start": current_soc,
+            "charge": charge,
+            "discharge": discharge,
+            "soc_end": next_soc,
+            "profit": realised_profit})
 
-cumulative_profit = sum(r["profit"] for r in results)
-total_charge = sum(r["charge"] for r in results)
-total_discharge = sum(r["discharge"] for r in results)
-total_throughput = total_charge + total_discharge
-equivalent_full_cycles = (total_throughput/ (2 * usable_capacity))
+        #move to next hour
+        current_soc = next_soc
 
-if equivalent_full_cycles > 0:
-    profit_per_cycle = (cumulative_profit/ equivalent_full_cycles)
-else:
-    profit_per_cycle = 0.0
+    cumulative_profit = sum(r["profit"] for r in results)
+    total_charge = sum(r["charge"] for r in results)
+    total_discharge = sum(r["discharge"] for r in results)
+    total_throughput = total_charge + total_discharge
+    equivalent_full_cycles = (total_throughput/ (2 * usable_capacity))
 
-energy_stored = total_charge * eta_c
+    if equivalent_full_cycles > 0:
+        profit_per_cycle = (cumulative_profit/ equivalent_full_cycles)
+    else:
+        profit_per_cycle = 0.0
 
-energy_required_for_discharge = total_discharge / eta_d
-if energy_required_for_discharge > 0:
-    round_trip_efficiency = (total_discharge/ energy_required_for_discharge)
-else:
-    round_trip_efficiency = 0.0
+    energy_stored = total_charge * eta_c
 
-event_threshold = 1e-6
-charge_events = sum(
-    1
-    for r in results
-    if r["charge"] > event_threshold)
+    energy_required_for_discharge = total_discharge / eta_d
+    if energy_required_for_discharge > 0:
+        round_trip_efficiency = (total_discharge/ energy_required_for_discharge)
+    else:
+        round_trip_efficiency = 0.0
 
-discharge_events = sum(
-    1
-    for r in results
-    if r["discharge"] > event_threshold)
+    event_threshold = 1e-6
+    charge_events = sum(
+        1
+        for r in results
+        if r["charge"] > event_threshold)
 
-print("\n" + "=" * 50)
-print("BATTERY PERFORMANCE SUMMARY")
-print("=" * 50)
-print(f"Cumulative profit:       ${cumulative_profit:,.2f}")
-print(f"Total charge:            {total_charge:,.2f} MWh")
-print(f"Total discharge:         {total_discharge:,.2f} MWh")
-print(f"Total throughput:        {total_throughput:,.2f} MWh")
-print(f"Equivalent full cycles:  {equivalent_full_cycles:,.2f}")
-print(f"Profit per cycle:        ${profit_per_cycle:,.2f}")
-print(f"Round-trip efficiency:    "f"{round_trip_efficiency * 100:.2f}%")
-print(f"Charge events:           {charge_events}")
-print(f"Discharge events:        {discharge_events}")
-print("=" * 50)
+    discharge_events = sum(
+        1
+        for r in results
+        if r["discharge"] > event_threshold)
 
-hours = [r["hour"] for r in results]
-prices_plot = [r["price"] for r in results]
-charge = [r["charge"] for r in results]
-discharge = [r["discharge"] for r in results]
+    print("\n" + "=" * 50)
+    print("BATTERY PERFORMANCE SUMMARY")
+    print("=" * 50)
+    print(f"Cumulative profit:       ${cumulative_profit:,.2f}")
+    print(f"Total charge:            {total_charge:,.2f} MWh")
+    print(f"Total discharge:         {total_discharge:,.2f} MWh")
+    print(f"Total throughput:        {total_throughput:,.2f} MWh")
+    print(f"Equivalent full cycles:  {equivalent_full_cycles:,.2f}")
+    print(f"Profit per cycle:        ${profit_per_cycle:,.2f}")
+    print(f"Round-trip efficiency:    "f"{round_trip_efficiency * 100:.2f}%")
+    print(f"Charge events:           {charge_events}")
+    print(f"Discharge events:        {discharge_events}")
+    print("=" * 50)
 
-plt.style.use("dark_background")
-plt.figure(figsize=(10, 8))
+    hours = [r["hour"] for r in results]
+    prices_plot = [r["price"] for r in results]
+    charge = [r["charge"] for r in results]
+    discharge = [r["discharge"] for r in results]
 
-plt.subplot(2, 1, 1)
+    plt.figure(figsize=(10, 8))
 
-plt.plot(hours, prices_plot, label="Price ($/MWh)")
-plt.bar(hours, charge, alpha=0.5, label="Charge (MW)")
-plt.bar(hours, [-d for d in discharge], alpha=0.5, label="Discharge (MW)")
+    plt.subplot(2, 1, 1)
 
-plt.axhline(0, linewidth=0.8)
-plt.xlabel("Hour")
-plt.ylabel("Price / Power")
-plt.title("Battery Charging and Discharging")
-plt.legend()
-plt.grid(True)
+    plt.plot(hours, prices_plot, label="Price ($/MWh)")
+    plt.bar(hours, charge, alpha=0.5, label="Charge (MW)")
+    plt.bar(hours, [-d for d in discharge], alpha=0.5, label="Discharge (MW)")
 
-plt.subplot(2, 1, 2)
+    plt.axhline(0, linewidth=0.8)
+    plt.xlabel("Hour")
+    plt.ylabel("Price / Power")
+    plt.title("Battery Charging and Discharging")
+    plt.legend()
+    plt.grid(True)
 
-soc = [results[0]["soc_start"]] + [r["soc_end"] for r in results]
-soc_hours = range(len(soc))
+    plt.subplot(2, 1, 2)
 
-plt.plot(soc_hours, soc)
+    soc = [results[0]["soc_start"]] + [r["soc_end"] for r in results]
+    soc_hours = range(len(soc))
 
-plt.axhline(100, linestyle="--", linewidth=0.8)
-plt.axhline(0, linestyle="--", linewidth=0.8)
+    plt.plot(soc_hours, soc)
 
-plt.xlabel("Hour")
-plt.ylabel("SOC (MWh)")
-plt.title("Battery State of Charge")
-plt.ylim(0, 105)
-plt.grid(True)
-plt.tight_layout()
-plt.show()
+    plt.axhline(100, linestyle="--", linewidth=0.8)
+    plt.axhline(0, linestyle="--", linewidth=0.8)
+
+    plt.xlabel("Hour")
+    plt.ylabel("SOC (MWh)")
+    plt.title("Battery State of Charge")
+    plt.ylim(0, 105)
+    plt.grid(True)
+    plt.tight_layout()
+    plt.show()
